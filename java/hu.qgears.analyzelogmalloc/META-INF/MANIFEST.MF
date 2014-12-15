@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Analyzelogmalloc
+Bundle-SymbolicName: hu.qgears.analyzelogmalloc
+Bundle-Version: 1.0.0.qualifier
+Bundle-Vendor: Q-Gears
+Bundle-RequiredExecutionEnvironment: JavaSE-1.6
+Require-Bundle: hu.qgears.commons;bundle-version="0.9.9"
