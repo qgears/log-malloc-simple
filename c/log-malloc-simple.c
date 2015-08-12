@@ -79,6 +79,8 @@ static void *(*real_calloc)(size_t nmemb, size_t size)	= NULL;
 static void *(*real_memalign)(size_t boundary, size_t size)	= NULL;
 static int   (*real_posix_memalign)(void **memptr, size_t alignment, size_t size)	= NULL;
 static void *(*real_valloc)(size_t size)	= NULL;
+static void *(*real_pvalloc)(size_t size)	= NULL;
+static void *(*real_aligned_alloc)(size_t alignment, size_t size)	= NULL;
 
 /* DL resolving */
 #define DL_RESOLVE(fn)	\
@@ -97,17 +99,30 @@ log_malloc_ctx_t *log_malloc_ctx_get(void)
 	return &g_ctx;
 }
 
+int myStrlen(const char * str)
+{
+	int ret=0;
+	while(*str!=0)
+	{
+		str++;
+		ret++;
+	}
+	return ret;
+}
 /*
  *  LIBRARY INIT/FINI FUNCTIONS
  */
-static inline void copyfile(const char *head, size_t head_len,
+/**
+ * Copy data from file to the log.
+ */
+static inline void copyfile(const char *head,
 	const char *path, int outfd)
 {
 	int w;
 	int fd = -1;
 	char buf[BUFSIZ];
 	ssize_t len = 0;
-
+	size_t head_len=myStrlen(head);
 	// no warning here, it will be simply missing in log
 	if((fd = open(path, 0)) == -1)
 		return;
@@ -134,6 +149,41 @@ void log_malloc_write(const char * buf, int size)
 	write_log(buf, size);
 }
 
+struct backtrace_struct {
+	int nptrs;
+	void * buffer[LOG_MALLOC_BACKTRACE_COUNT + 1];	
+};
+
+// TODO document static allocator - we need it while the real_* pointer are being set up.
+#define STATIC_SIZE 1024
+static char static_buffer[STATIC_SIZE];
+static int static_pointer=0;
+
+
+static inline void log_mem(const char * method, void *ptr, size_t size, struct backtrace_struct * bt)
+{
+	/* prevent endless recursion, because inital backtrace call can involve some allocs */
+	if(!g_ctx.memlog_disabled)
+	{
+		char buf[LOG_BUFSIZE];
+		int len = snprintf(buf, sizeof(buf), "+ %s %zu %p\n", method,
+			size, ptr);
+			int w;
+		/* try synced write */
+		if(LOCK(g_ctx.loglock))
+		{
+			write_log(buf, len);
+			if(bt!=NULL && bt->nptrs>0)
+			{
+				backtrace_symbols_fd(&(bt->buffer[1]), bt->nptrs-1, g_ctx.memlog_fd);
+			}
+			write_log("-\n", 2);
+			UNLOCK(g_ctx.loglock);
+		}
+	}
+	return;
+}
+
 static void *__init_lib(void)
 {
 	/* check already initialized */
@@ -152,6 +202,8 @@ static void *__init_lib(void)
 	DL_RESOLVE(memalign);
 	DL_RESOLVE(posix_memalign);
 	DL_RESOLVE(valloc);
+	DL_RESOLVE(pvalloc);
+	DL_RESOLVE(aligned_alloc);
 	__sync_bool_compare_and_swap(&g_ctx.init_done,
 		LOG_MALLOC_INIT_STARTED, LOG_MALLOC_INIT_DONE);
 	//TODO: call backtrace here to init itself
@@ -181,9 +233,19 @@ static void *__init_lib(void)
 			s = snprintf(buf, sizeof(buf), "# CWD %s\n", path);
 			write_log(buf, s);
 		}
+		copyfile("# MAPS\n", "/proc/self/maps", g_ctx.memlog_fd);
+/*		s = readlink("/proc/self/maps", path, sizeof(path));
+		if(s > 1)
+		{
+			path[s] = '\0';
+			s = snprintf(buf, sizeof(buf), "# MAPS %s\n", path);
+			write_log(buf, s);
+	}
+	*/
 
-		s = snprintf(buf, sizeof(buf), "+ INIT \n");
-		write_log(buf, s);
+		s = snprintf(buf, sizeof(buf), "+ INIT \n-\n");
+		log_mem("INIT", &static_buffer, static_pointer, NULL);
+//		write_log(buf, s);
 	}
 	return (void *)0x01;
 }
@@ -207,7 +269,7 @@ static void __fini_lib(void)
 		char buf[LOG_BUFSIZE];
 		const char maps_head[] = "# FILE /proc/self/maps\n";
 
-		s = snprintf(buf, sizeof(buf), "+ FINI\n");
+		s = snprintf(buf, sizeof(buf), "+ FINI\n-\n");
 		write_log(buf, s);
 
 		/* maps out here, because dynamic libs could by mapped during run */
@@ -222,46 +284,15 @@ static void __attribute__ ((destructor))log_malloc2_fini(void)
   	return;
 }
 
+/// On this thread we are currently writing a trace event so prevent self-recursion
 static __thread int in_trace = 0;
 
-struct backtrace_struct {
-	int nptrs;
-	void * buffer[LOG_MALLOC_BACKTRACE_COUNT + 1];	
-};
 /*
  *  INTERNAL FUNCTIONS
  */
 #define CREATE_BACKTRACE(BACKTRACE_STRUCT) (BACKTRACE_STRUCT).nptrs=backtrace(((BACKTRACE_STRUCT).buffer), LOG_MALLOC_BACKTRACE_COUNT)
 //#define CREATE_BACKTRACE(BACKTRACE_STRUCT) (BACKTRACE_STRUCT).nptrs=10
 
-int a;
-
-static inline void log_mem(const char * method, void *ptr, size_t size, struct backtrace_struct * bt)
-{
-	/* prevent endless recursion, because inital backtrace call can involve some allocs */
-	if(!g_ctx.memlog_disabled)
-	{
-		char buf[LOG_BUFSIZE];
-		int len = snprintf(buf, sizeof(buf), "+ %s %zu %p\n", method,
-			size, ptr);
-			int w;
-		/* try synced write */
-		if(LOCK(g_ctx.loglock))
-		{
-			write_log(buf, len);
-			if(bt!=NULL && bt->nptrs>0)
-			{
-				backtrace_symbols_fd(&(bt->buffer[1]), bt->nptrs-1, g_ctx.memlog_fd);
-			}
-			UNLOCK(g_ctx.loglock);
-		}
-	}
-	return;
-}
-// TODO document static allocator - we need it while the real_* pointer are being set up.
-#define STATIC_SIZE 1024
-static char static_buffer[STATIC_SIZE];
-static int static_pointer=0;
 static inline void * malloc_static(size_t size)
 {
 	void * ret=static_buffer+static_pointer;
@@ -279,6 +310,11 @@ static inline void * calloc_static(size_t nmemb, size_t size)
 	if(static_pointer>STATIC_SIZE)
 	{
 		return NULL;
+	}
+	int i;
+	for(i=0;i<size;++i)
+	{
+		*(((char *)ret)+i)=0;
 	}
 	return ret;
 }
@@ -333,7 +369,10 @@ void *realloc(void *ptr, size_t size)
 		in_trace=1;
 		struct backtrace_struct bt;
 		CREATE_BACKTRACE(bt);
-		log_mem("realloc_free", ptr, prevSize, &bt);
+		if(ptr!=NULL)
+		{
+			log_mem("realloc_free", ptr, prevSize, &bt);
+		}
 		size_t afterSize=malloc_usable_size(ret);
 		log_mem("realloc_alloc", ret, afterSize, &bt);
 		in_trace=0;
@@ -391,6 +430,39 @@ void *valloc(size_t size)
 	}
 	return ret;
 }
+void *pvalloc(size_t size)
+{
+	if(!DL_RESOLVE_CHECK(pvalloc))
+		return NULL;
+	void * ret=real_pvalloc(size);
+	if(!in_trace)
+	{
+		in_trace=1;
+		struct backtrace_struct bt;
+		CREATE_BACKTRACE(bt);
+		size_t sizeAllocated=malloc_usable_size(ret);
+		log_mem("pvalloc", ret, sizeAllocated, &bt);
+		in_trace=0;
+	}
+	return ret;
+}
+
+void *aligned_alloc(size_t alignment, size_t size)
+{
+	if(!DL_RESOLVE_CHECK(aligned_alloc))
+		return NULL;
+	void * ret=real_aligned_alloc(alignment, size);
+	if(!in_trace)
+	{
+		in_trace=1;
+		struct backtrace_struct bt;
+		CREATE_BACKTRACE(bt);
+		size_t sizeAllocated=malloc_usable_size(ret);
+		log_mem("aligned_alloc", ret, sizeAllocated, &bt);
+		in_trace=0;
+	}
+	return ret;
+}
 
 void free(void *ptr)
 {
@@ -402,8 +474,10 @@ void free(void *ptr)
 	if(ptr!=NULL&&!in_trace)
 	{
 		in_trace=1;
+		struct backtrace_struct bt;
+		CREATE_BACKTRACE(bt);
 		size_t size=malloc_usable_size(ptr);
-		log_mem("free", ptr, size, NULL);
+		log_mem("free", ptr, size, &bt);
 		in_trace=0;
 	}
 	real_free(ptr);
