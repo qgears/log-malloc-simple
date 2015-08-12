@@ -37,9 +37,13 @@ Standalone program written in Java. Usage:
 - Create a pipe that will transfer memory allocation log to the Java program: `$ mkfifo /tmp/malloc.pipe`
 - Start analyzer: `$ java -jar analyzer.jar /tmp/malloc.pipe`
 - Use console to command analyzer: stop/start collecting data, print or save current state to file
-- Start program to analyze: `$ LD_PRELOAD=./liblog-malloc-simple.so command args ... 1022>/tmp/program.log`
+- Start program to analyze: `$ LD_PRELOAD=./liblog-malloc-simple.so my_executable args ... 1022>/tmp/malloc.pipe`
 - Run test cases that should run without leaking memory.
 - See the output of the analyzer for non-freed memory chunks.
+
+## Building instructions
+
+
 
 # Author
 
