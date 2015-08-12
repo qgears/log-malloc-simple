@@ -43,7 +43,10 @@ Standalone program written in Java. Usage:
 
 ## Building instructions
 
-
+- import the `hu.qgears.analyzelogmalloc` and `hu.qgears.commons` projects into an Eclipse workspace
+ - hint: `hu.qgears.commons` is located in the  https://github.com/qgears/opensource-utils repo
+- create a Java app. run configuration for the `Analyze` class
+- export the run configuration as an executable jar
 
 # Author
 
