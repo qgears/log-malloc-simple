@@ -45,10 +45,12 @@ Standalone program written in Java. Usage:
 
 ## Building instructions
 
+- The analyser is written in Java and stored as an Eclipse project. (The project uses OSGI for dependency management but must be run as a standalone Java program.)
 - import the `hu.qgears.analyzelogmalloc` and `hu.qgears.commons` projects into an Eclipse workspace
- - hint: `hu.qgears.commons` is located in the  https://github.com/qgears/opensource-utils repo
-- create a Java app. run configuration for the `Analyze` class
+ - hint: `hu.qgears.commons` dependency is located in the  https://github.com/qgears/opensource-utils repo
+- create a Java app. run configuration for the `Analyze` class. Analyser may be used by launching inside Eclipse as a standalone applocation.
 - export the run configuration as an executable jar
+- TODO: implement MAVEN build
 
 #Log file format
 
