@@ -52,7 +52,7 @@ Standalone program written in Java. Usage:
 
 #Log file format
 
-'''
+```
 # PID 5625
 # EXE /usr/bin/gedit
 # CWD /home/rizsi/github-qgears/log-malloc-simple/c
@@ -75,9 +75,10 @@ Standalone program written in Java. Usage:
 
 + free 24 0x1db9360
 -
-'''
+```
 
 * Log stream begins with basic process information lines beginning with #
+* #MAPS ...: content of /proc/self/maps
 * Log entries start with a line beginning with '+' followed by an entry type name and two numbers (all separated by single space characters):
     * First is size in bytes as a decimal number
     * Second is memory address as a hexadecimal constant (eg. 0x1db9010)
@@ -102,7 +103,7 @@ Analyser waits for commands on stdin:
 
 The analysed data output is in text format. After a short summary all not-freed allocations are listed. These entries are ordered and summarised by the identifier of the instruction (library+pointer) calling the allocation method. The textual output of the same program in different moments may be compared to each other using text comparing tools to find leaks. (A single call from each allocator calling instruction is printed as an example in the output but this does not mean that it is the only possible stack trace that calls this leaking method.):
 
-'''
+```
 Processing timespan in millis (since first log processed after reset, measured with currentTimeMillis): 9,331
 Allocation balance (bytes, negative means leak): -353,560
 Number of objects allocated in log session but not freed yet: 2714
@@ -120,7 +121,10 @@ allocator: /usr/lib/x86_64-linux-gnu/libpixman-1.so.0(+0x58c6b)[0x7ff6ccd50c6b]
 	/usr/lib/x86_64-linux-gnu/libpixman-1.so.0(+0x9a09)[0x7ff6ccd01a09]
 	/lib64/ld-linux-x86-64.so.2(+0x105ba)[0x7ff6d370c5ba]
 	/lib64/ld-linux-x86-64.so.2(+0x106cb)[0x7ff6d370c6cb]
-'''
+
+...
+
+```
 
 # Author
 
