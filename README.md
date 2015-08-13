@@ -45,6 +45,18 @@ Standalone program written in Java. Usage:
 
 ## Building instructions
 
+### The maven way
+
+`
+git clone https://github.com/qgears/opensource-utils.git
+git clone https://github.com/qgears/log-malloc-simple.git
+cd log-malloc-simple
+mvn package
+`
+The resulting, standalone jar, with all its dependencies packed in, will be located as follows:
+`java/hu.qgears.analyzelogmalloc/target/analyzer.jar`
+
+### Eclipse IDE
 - The analyser is written in Java and stored as an Eclipse project. (The project uses OSGI for dependency management but must be run as a standalone Java program.)
 - import the `hu.qgears.analyzelogmalloc` and `hu.qgears.commons` projects into an Eclipse workspace
  - hint: `hu.qgears.commons` dependency is located in the  https://github.com/qgears/opensource-utils repo
