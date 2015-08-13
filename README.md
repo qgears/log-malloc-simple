@@ -143,7 +143,7 @@ allocator: /usr/lib/x86_64-linux-gnu/libpixman-1.so.0(+0x58c6b)[0x7ff6ccd50c6b]
 # Author
 
 - ***András Schmidt***
- - **contact**: [https://github.com/rizsi](Github page of author)
+ - **contact**: https://github.com/rizsi (author's Github page)
 
 # Licensing
 
