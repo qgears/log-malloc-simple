@@ -47,12 +47,12 @@ Standalone program written in Java. Usage:
 
 ### The maven way
 
-`
+```
 git clone https://github.com/qgears/opensource-utils.git
 git clone https://github.com/qgears/log-malloc-simple.git
 cd log-malloc-simple
 mvn package
-`
+```
 The resulting, standalone jar, with all its dependencies packed in, will be located as follows:
 `java/hu.qgears.analyzelogmalloc/target/analyzer.jar`
 
