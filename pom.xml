@@ -9,7 +9,7 @@
         <packaging>pom</packaging>
 
 	<modules>
-		<module>../opensource-utils/master/commons/hu.qgears.commons/pom-plain.xml</module>
+		<module>../opensource-utils/commons/hu.qgears.commons/pom-plain.xml</module>
 		<module>java/hu.qgears.analyzelogmalloc</module>
 	</modules>
 </project>
