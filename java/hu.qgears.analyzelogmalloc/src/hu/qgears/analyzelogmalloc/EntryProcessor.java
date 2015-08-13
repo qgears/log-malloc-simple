@@ -14,31 +14,48 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * Processes entries from the log stream by finding allocation/free pairs and summarizing
+ * allocated but not freed data.
+ * @author rizsi
+ *
+ */
 public class EntryProcessor {
 	private Map<String, Entry> allocations = new HashMap<String, Entry>();
+	/**
+	 * Free entries that correspond to objects that were allocated before reset or when analyser was off.
+	 */
 	private Map<String, Entry> beforeAllocations = new HashMap<String, Entry>();
+	/**
+	 * Timestamp of the first entry processed.
+	 */
 	long tStart=0;
+	private long balance;
+	private long beforeBalance;
+	private int beforeN;
+	private int matching;
+	private long matchingSum;
+	/**
+	 * All entries stored currently.
+	 * @author rizsi
+	 *
+	 */
 	class Entries
 	{
 		long sum;
 		String key;
 		List<Entry> entries;
 	}
-	private long balance;
-	private long beforeBalance;
-	private int beforeN;
-	private int matching;
-	private long matchingSum;
 	public void processOutput(PrintStream out) {
-		out.println("Processing timespan (since first log processed, measured with currentTimeMillis): "+formatMem( (System.currentTimeMillis()-tStart)));
-		out.println("Allocation balance (negative means leak): "
+		out.println("Processing timespan in millis (since first log processed after reset, measured with currentTimeMillis): "+formatMem( (System.currentTimeMillis()-tStart)));
+		out.println("Allocation balance (bytes, negative means leak): "
 				+ formatMem(balance));
-		out.println("Freed objects size allocated before log: "
+		out.println("Number of objects allocated in log session but not freed yet: " + allocations.size());
+		out.println("Size of objects freed in log session but not allocated in log session (bytes): "
 				+ formatMem(beforeBalance));
-		out.println("Objects remaining from log session: " + allocations.size());
-		out.println("Freed objects N before log: " + beforeN + " "
+		out.println("Number of objects freed in session but not allocated in session: " + beforeN + " without multiple frees: "
 				+ beforeAllocations.size());
-		out.println("Matching alloc/free pairs (n, size): " + matching + " "
+		out.println("Matching alloc/free pairs through the logging session (n, bytes): " + matching + " "
 				+ formatMem(matchingSum));
 		MultiMapHashImpl<String, Entry> entriesByAllocator = new MultiMapHashImpl<String, Entry>();
 		for (Entry e : allocations.values()) {
@@ -97,7 +114,11 @@ public class EntryProcessor {
 					matching++;
 					matchingSum += e.getSize();
 				} else {
-					beforeAllocations.put(e.getAddress(), e);
+					Entry prev=beforeAllocations.put(e.getAddress(), e);
+					if(prev!=null)
+					{
+						System.err.println("Memory freed twice: "+e+" "+prev);
+					}
 					beforeBalance += e.getSize();
 					beforeN++;
 				}

@@ -12,7 +12,25 @@ import java.io.PrintStream;
 import java.io.Reader;
 import java.util.List;
 
+/**
+ * log-malloc-simple analyser tool. Command line tool that reads input from an process instrumented
+ * with log-malloc-simple and processes it to show usable information.
+ * 
+ * @author rizsi
+ *
+ */
 public class Analyze {
+	/**
+	 * Analysation is running.
+	 * When false then input is ignored.
+	 */
+	private boolean on=true;
+	/**
+	 * The current entry read from log-malloc-simple input data strem.
+	 * The object is updated with data read from input until the next object header is read. Then this object is processed.
+	 */
+	private Entry e = new Entry();
+	private EntryProcessor entryProcessor=new EntryProcessor();
 	public static void main(String[] args) throws Exception {
 		if(args.length!=1)
 		{
@@ -22,7 +40,6 @@ public class Analyze {
 			new Analyze().start(args);
 		}
 	}
-	private boolean on=true;
 
 	private static void printUsage() {
 		System.out.println("logmalloc output analyser program. Usage:");
@@ -30,12 +47,13 @@ public class Analyze {
 		System.out.println(" 2. Start analyser on the fifo file: java -jar analyze.jar /tmp/malloc.pipe");
 		System.out.println(" 3. Start program to analyze with log-malloc: LD_PRELOAD=liblog-malloc2.so java -jar any.jar 1022>/tmp/malloc.pipe");
 		System.out.println(" 4. Use command line to instruct analyzer:");
-		System.out.println("  * off - turn analyzer off while the application is setting up (to spare CPU cycles)");
-		System.out.println("  * on - turn analyzer on when the critical session is started");
-		System.out.println("  * (reset - clear all log entries cached by the analyzer)");
-		System.out.println("  * print/save - create logs from results since last reset");
+		printCommands(System.out);
 	}
-
+	/**
+	 * Start analyser on a separate thread and do user communication on the caller thread.
+	 * Returns when communicateUser returns.
+	 * @param args
+	 */
 	private void start(String[] args) {
 		final File input = new File(args[0]);
 		new Thread("logreader thread") {
@@ -45,30 +63,44 @@ public class Analyze {
 		}.start();
 		communicateUser();
 	}
-
-	private Entry e = new Entry();
-	private EntryProcessor entryProcessor=new EntryProcessor();
-
+	/**
+	 * Do processing of input stream in by reading it line by line in a blocking manner.
+	 * @param f
+	 */
 	private void processInput(File f) {
 		try {
 			Reader r = new InputStreamReader(new FileInputStream(f));
 			BufferedReader br = new BufferedReader(r);
-			String line;
-			while ((line = br.readLine()) != null) {
-				if (line.startsWith("+")) {
-					processEntry();
-					e.setStartLine(line);
-				} else {
-					e.addLine(line);
+			try
+			{
+				String line;
+				while ((line = br.readLine()) != null) {
+					if (line.startsWith("+")) {
+						// Log entry starts. Close previous log entry and setup new object.
+						processEntry();
+						e.setStartLine(line);
+					} else if (line.startsWith("-")) {
+						// Log entry finished. Process current log entry.
+						processEntry();
+					} else {
+						e.addLine(line);
+					}
 				}
+				processEntry();
+			} finally
+			{
+				br.close();
 			}
-			processEntry();
 			System.err.println("Input closed.");
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
-
+	/**
+	 * Process the current entry that is being updated right now by input.
+	 * In case the current entry is empty then does nothing.
+	 * In case the current entry was opened with a "+..." line then store it into the entryproceesor
+	 */
 	private void processEntry() {
 		if(on)
 		{
@@ -78,11 +110,14 @@ public class Analyze {
 			}
 		}
 	}
-
+	/**
+	 * Read input commands from the user and process them.
+	 */
 	private void communicateUser() {
 		try {
 			BufferedReader br=new BufferedReader(new InputStreamReader(System.in));
 			printCommands(System.out);
+			System.out.println("Command: ");
 			String line;
 			while ((line = br.readLine()) != null) {
 				try {
@@ -109,6 +144,7 @@ public class Analyze {
 					e.printStackTrace();
 				}
 				printCommands(System.out);
+				System.out.println("Command: ");
 			}
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -116,12 +152,19 @@ public class Analyze {
 		}
 
 	}
-
+	/**
+	 * Enable processing of input data.
+	 * @param b
+	 */
 	private synchronized void on(boolean b) {
 		on=b;
 		System.out.println("Log stream processing on: "+on+"\n");
 	}
-
+	/**
+	 * save the current state of the processor into a file.
+	 * @param string
+	 * @throws IOException
+	 */
 	synchronized private void save(String string) throws IOException {
 		File f=new File(string);
 		FileOutputStream fos=new FileOutputStream(f);
@@ -135,22 +178,28 @@ public class Analyze {
 			fos.close();
 		}
 	}
-
+	/**
+	 * Print the current state of the processor.
+	 */
 	private synchronized void print() {
 		entryProcessor.processOutput(System.out);
 	}
-
+	/**
+	 * Reset the current state of the processor. Forgets all events that are logged up to now.
+	 */
 	private synchronized void reset() {
 		entryProcessor = new EntryProcessor();
 		System.out.println("Entry processor reset");
 	}
-
-	private void printCommands(PrintStream out) {
-		out.println("reset - reset all known allocation");
-		out.println("print - print current allocation status");
-		out.println("save <filename> - save current allocation status to file");
-		out.println("off - temporarily ignore all input from log stream");
-		out.println("on - process all input from log stream from now on");
-		out.println("Command: ");
+	/**
+	 * Print possible commands to the user.
+	 * @param out
+	 */
+	private static void printCommands(PrintStream out) {
+		out.println(" * off - turn analyzer off while the application is setting up (to spare CPU cycles when analysation is not required - eg initialization of the program)");
+		out.println(" * on - turn analyzer on when the critical session is started (default is on)");
+		out.println(" * (reset - clear all log entries cached by the analyzer)");
+		out.println(" * print - print current allocation status (since last reset/on) to stdout");
+		out.println(" * save <filename> - print current allocation status (since last reset/on) to file");
 	}
 }
