@@ -23,7 +23,6 @@ log-malloc-simple is a much simplified version of log-malloc2. The simplificatio
 ## Dependencies
 
 - malloc_usable_size() method - could be get rid of but we could not track the size of freed memory chunks. In case we analyze all the logs of the whole lifecycle of the program then it could be accepted.
-- pthread - for synchronizing logs from different threads.
 - /proc/self/exe, /proc/self/cwd
 
 ## Usage
