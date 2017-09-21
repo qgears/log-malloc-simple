@@ -179,7 +179,7 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 						{
 							names[i]="?";
 						}
-						len+=snprintf(buf+len, sizeof(buf)-len-2, "    %s\n", names[i-1]);
+						len+=snprintf(buf+len, sizeof(buf)-len-2, "%s\n", names[i-1]);
 					}
 					free(names);
 				}
@@ -187,7 +187,7 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 				{
 					for(int i=1;i<bt->nptrs;++i)
 					{
-						len+=snprintf(buf+len, sizeof(buf)-len-2, "    %016lx\n", (long)bt->buffer[i]);
+						len+=snprintf(buf+len, sizeof(buf)-len-2, "%016lx\n", (long)bt->buffer[i]);
 					}
 				}
 			}
