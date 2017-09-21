@@ -168,10 +168,9 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 		char buf[LOG_BUFSIZE];
 		int len = snprintf(buf, sizeof(buf), "+ %s %zu %p\n", method,
 			size, ptr);
-			int w;
 			if(bt!=NULL && bt->nptrs>0)
 			{
-				char ** names=backtrace_symbols(bt->buffer[1], bt->nptrs-1);
+				char ** names=backtrace_symbols(&(bt->buffer[1]), bt->nptrs-1);
 				if(names!=NULL)
 				{
 					for(int i=1;i<bt->nptrs;++i)
@@ -180,7 +179,7 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 						{
 							names[i]="?";
 						}
-						len+=snprintf(buf+len, sizeof(buf)-len-2, "    %016lx %s\n", (long)bt->buffer[i], names[i-1]);
+						len+=snprintf(buf+len, sizeof(buf)-len-2, "    %s\n", names[i-1]);
 					}
 					free(names);
 				}
@@ -191,7 +190,6 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 						len+=snprintf(buf+len, sizeof(buf)-len-2, "    %016lx\n", (long)bt->buffer[i]);
 					}
 				}
-//			backtrace_symbols_fd(&(bt->buffer[1]), bt->nptrs-1, g_ctx.memlog_fd);
 			}
 			len+=snprintf(buf+len, sizeof(buf)-len, "-\n");
 			write_log(buf, len);
