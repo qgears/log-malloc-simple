@@ -68,7 +68,7 @@
 #include "log-malloc-simple-internal.h"
 
 /* config */
-#define LOG_BUFSIZE		128
+#define LOG_BUFSIZE		4096
 #define MAX_PADDING		1024
 
 /* handler declarations */
@@ -144,17 +144,17 @@ static inline void write_log(const char * buf, int size)
 		g_ctx.memlog_disabled = true;
 	}
 }
-void log_malloc_write(const char * buf, int size)
-{
-	write_log(buf, size);
-}
 
 struct backtrace_struct {
 	int nptrs;
 	void * buffer[LOG_MALLOC_BACKTRACE_COUNT + 1];	
 };
 
-// TODO document static allocator - we need it while the real_* pointer are being set up.
+/** During initialization while the real_* pointer are being set up we can not pass malloc calls to the real
+ * malloc.
+ * During this time malloc calls allocate memory in this area.
+ * After initialization is done this buffer is no longer used.
+ */
 #define STATIC_SIZE 1024
 static char static_buffer[STATIC_SIZE];
 static int static_pointer=0;
@@ -169,17 +169,33 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 		int len = snprintf(buf, sizeof(buf), "+ %s %zu %p\n", method,
 			size, ptr);
 			int w;
-		/* try synced write */
-		if(LOCK(g_ctx.loglock))
-		{
-			write_log(buf, len);
 			if(bt!=NULL && bt->nptrs>0)
 			{
-				backtrace_symbols_fd(&(bt->buffer[1]), bt->nptrs-1, g_ctx.memlog_fd);
+				char ** names=backtrace_symbols(bt->buffer[1], bt->nptrs-1);
+				if(names!=NULL)
+				{
+					for(int i=1;i<bt->nptrs;++i)
+					{
+						if(names[i]==NULL)
+						{
+							names[i]="?";
+						}
+						len+=snprintf(buf+len, sizeof(buf)-len-2, "    %016lx %s\n", (long)bt->buffer[i], names[i-1]);
+					}
+					free(names);
+				}
+				else
+				{
+					for(int i=1;i<bt->nptrs;++i)
+					{
+						len+=snprintf(buf+len, sizeof(buf)-len-2, "    %016lx\n", (long)bt->buffer[i]);
+					}
+					free(names);
+				}
+//			backtrace_symbols_fd(&(bt->buffer[1]), bt->nptrs-1, g_ctx.memlog_fd);
 			}
-			write_log("-\n", 2);
-			UNLOCK(g_ctx.loglock);
-		}
+			len+=snprintf(buf+len, sizeof(buf)-len, "-\n");
+			write_log(buf, len);
 	}
 	return;
 }
@@ -293,16 +309,6 @@ static __thread int in_trace = 0;
 #define CREATE_BACKTRACE(BACKTRACE_STRUCT) (BACKTRACE_STRUCT).nptrs=backtrace(((BACKTRACE_STRUCT).buffer), LOG_MALLOC_BACKTRACE_COUNT)
 //#define CREATE_BACKTRACE(BACKTRACE_STRUCT) (BACKTRACE_STRUCT).nptrs=10
 
-static inline void * malloc_static(size_t size)
-{
-	void * ret=static_buffer+static_pointer;
-	static_pointer+=size;
-	if(static_pointer>STATIC_SIZE)
-	{
-		return NULL;
-	}
-	return ret;
-}
 static inline void * calloc_static(size_t nmemb, size_t size)
 {
 	void * ret=static_buffer+static_pointer;
@@ -325,7 +331,7 @@ void *malloc(size_t size)
 {
 	if(!DL_RESOLVE_CHECK(malloc))
 	{
-		return malloc_static(size);
+		return calloc_static(size, 1);
 	}
 	void * ret=real_malloc(size);
 	if(!in_trace)
