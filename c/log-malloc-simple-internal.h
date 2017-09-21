@@ -15,7 +15,6 @@
 #include <stdint.h>
 
 #include <stdbool.h>
-#include <pthread.h>
 
 /* init constants */
 #define LOG_MALLOC_INIT_NULL		0xFAB321
