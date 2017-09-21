@@ -190,7 +190,6 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 					{
 						len+=snprintf(buf+len, sizeof(buf)-len-2, "    %016lx\n", (long)bt->buffer[i]);
 					}
-					free(names);
 				}
 //			backtrace_symbols_fd(&(bt->buffer[1]), bt->nptrs-1, g_ctx.memlog_fd);
 			}
