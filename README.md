@@ -5,7 +5,7 @@ log-malloc-simple
 
 The output of *log-malloc-simple* can be easily parsed by a log analyzer tool. A simple log-analyzer written in Java is also part of this package.
 
-#Changes compared to log-malloc2
+## Changes compared to log-malloc2
 
 log-malloc-simple is a much simplified version of log-malloc2. The simplifications and their reason:
 
@@ -14,23 +14,23 @@ log-malloc-simple is a much simplified version of log-malloc2. The simplificatio
 - Conditional compilation is removed. I have no chance to test all versions of the code. Only platforms with GNU backtrace and malloc_usable_size are supported.
 - Data aggregation of the logger is removed. It is delegated to a separate log-analyzer tool.
 
-#Features
+## Features
 
 - logging to file descriptor 1022 (if opened)
 - call stack **backtrace** (using GNU backtrace())
 - thread safe
 
-#Dependencies
+## Dependencies
 
 - malloc_usable_size() method - could be get rid of but we could not track the size of freed memory chunks. In case we analyze all the logs of the whole lifecycle of the program then it could be accepted.
 - pthread - for synchronizing logs from different threads.
 - /proc/self/exe, /proc/self/cwd
 
-#Usage
+## Usage
 
 `LD_PRELOAD=./liblog-malloc-simple.so command args ... 1022>/tmp/program.log`
 
-#Log analyzer tool
+### Log analyzer tool
 
 Standalone program written in Java. Usage:
 
@@ -64,7 +64,7 @@ The resulting, standalone jar, with all its dependencies packed in, will be loca
 - export the run configuration as an executable jar
 - TODO: implement MAVEN build
 
-#Log file format
+## Log file format
 
 ```
 # PID 5625
@@ -105,7 +105,7 @@ end with a line beginning with '-'
 * Allocation log entries contain stack trace where the allocation related method was called from
 * Log entries are closed with a line starting with "-" character
 
-# Analysed data output
+## Analysed data output
 
 Analyser waits for commands on stdin:
 
