@@ -205,7 +205,6 @@ static void *__init_lib(void)
 	{
 		return 0;
 	}
-	LOCK_INIT();
 
 	/* get real functions pointers */
 	DL_RESOLVE(malloc);

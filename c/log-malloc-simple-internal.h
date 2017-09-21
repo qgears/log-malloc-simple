@@ -17,12 +17,6 @@
 #include <stdbool.h>
 #include <pthread.h>
 
-/* pthread shortcuts */
-# define LOCK_INIT()	1
-# define LOCK(lock)	(pthread_mutex_trylock(&(lock)) == 0)
-# define UNLOCK(lock)	(pthread_mutex_unlock(&(lock)))
-
-
 /* init constants */
 #define LOG_MALLOC_INIT_NULL		0xFAB321
 #define LOG_MALLOC_INIT_STARTED		0xABCABC
@@ -34,7 +28,6 @@ typedef struct log_malloc_ctx_s {
 	sig_atomic_t init_done;
 	int memlog_fd;
 	bool memlog_disabled;
-	pthread_mutex_t loglock;
 } log_malloc_ctx_t;
 
 #define LOG_MALLOC_CTX_INIT			\
@@ -42,10 +35,10 @@ typedef struct log_malloc_ctx_s {
 		LOG_MALLOC_INIT_NULL,		\
 		LOG_MALLOC_TRACE_FD,		\
 		false,				\
-		PTHREAD_MUTEX_INITIALIZER,	\
 	}
 
 /* API function */
 log_malloc_ctx_t *log_malloc_ctx_get(void);
 void log_malloc_write(const char * str, int len);
 #endif
+

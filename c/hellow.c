@@ -1,3 +1,4 @@
+// Compile: gcc -rdynamic hellow.c
 #include <stdio.h>
 #include <stdlib.h>
 int main ()
