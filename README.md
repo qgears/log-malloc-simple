@@ -28,7 +28,13 @@ log-malloc-simple is a much simplified version of log-malloc2. The simplificatio
 
 ## Usage
 
-`LD_PRELOAD=./liblog-malloc-simple.so command args ... 1022>/tmp/program.log`
+`LD_PRELOAD=./log-malloc-simple.so command args ... 1022>/tmp/program.log`
+
+or it is possible to send the logs to TCP directly:
+
+`LD_PRELOAD=./log-malloc-simple.so command args ... 1022>/dev/tcp/$HOSTNAME/$PORT`
+
+On the log processing computer a pipe and netcat can be used to direct the data into the log analyser tool.
 
 ### Log analyzer tool
 
@@ -37,7 +43,7 @@ Standalone program written in Java. Usage:
 - Create a pipe that will transfer memory allocation log to the Java program: `$ mkfifo /tmp/malloc.pipe`
 - Start analyzer: `$ java -jar analyzer.jar /tmp/malloc.pipe`
 - Use console to command analyzer: stop/start collecting data, print or save current state to file
-- Start program to analyze: `$ LD_PRELOAD=./liblog-malloc-simple.so my_executable args ... 1022>/tmp/malloc.pipe`
+- Start program to analyze: `$ LD_PRELOAD=./log-malloc-simple.so my_executable args ... 1022>/tmp/malloc.pipe`
 - Run test cases that should run without leaking memory.
 - See the output of the analyzer for non-freed memory chunks.
 - Log output may also be directed to a static file and analysed offline.
