@@ -68,35 +68,19 @@
 #include <dlfcn.h>
 #include <assert.h>
 
+/* config */
+/** Maximum bytes of a single log entry. They are prepared in buffers of this size allocated on the stack.  */
+#define LOG_BUFSIZE		4096
+/** FD where output is written to. */
+#define LOG_MALLOC_TRACE_FD		1022
+/** Maximum number of stack trace elements. */
+#define LOG_MALLOC_BACKTRACE_COUNT	20
 
 /* init constants */
 #define LOG_MALLOC_INIT_NULL		0xFAB321
 #define LOG_MALLOC_INIT_STARTED		0xABCABC
 #define LOG_MALLOC_INIT_DONE		0x123FAB
 #define LOG_MALLOC_FINI_DONE		0xFAFBFC
-
-/* global context */
-typedef struct log_malloc_ctx_s {
-	sig_atomic_t init_done;
-	int memlog_fd;
-	bool memlog_disabled;
-} log_malloc_ctx_t;
-
-#define LOG_MALLOC_CTX_INIT			\
-	{					\
-		LOG_MALLOC_INIT_NULL,		\
-		LOG_MALLOC_TRACE_FD,		\
-		false,				\
-	}
-
-void log_malloc_write(const char * str, int len);
-
-
-/* config */
-#define LOG_BUFSIZE		4096
-#define MAX_PADDING		1024
-#define LOG_MALLOC_TRACE_FD		1022
-#define LOG_MALLOC_BACKTRACE_COUNT	7
 
 /* handler declarations */
 static void *(*real_malloc)(size_t size)	= NULL;
@@ -115,13 +99,17 @@ static void *(*real_aligned_alloc)(size_t alignment, size_t size)	= NULL;
 #define DL_RESOLVE_CHECK(fn)	\
 	((!real_ ## fn) ? __init_lib() : ((void *)0x1))
 
-/* data context */
-static log_malloc_ctx_t g_ctx = LOG_MALLOC_CTX_INIT;
+/* Flag that stores initialization state */
+static sig_atomic_t init_done=LOG_MALLOC_INIT_NULL;
+/* output is disabled because the lineno does not exist */
+static bool memlog_disabled=false;
+
 
 /*
  *  INTERNAL API FUNCTIONS
  */
 
+/** Count the length of a null terminated string. */
 int myStrlen(const char * str)
 {
 	int ret=0;
@@ -160,9 +148,9 @@ static inline void copyfile(const char *head,
 }
 static inline void write_log(const char * buf, int size)
 {
-    	if(!g_ctx.memlog_disabled)
+    	if(!memlog_disabled)
 	{
-		write(g_ctx.memlog_fd, buf, size);
+		write(LOG_MALLOC_TRACE_FD, buf, size);
         }
 }
 
@@ -179,13 +167,12 @@ struct backtrace_struct {
 #define STATIC_SIZE 1024
 static char static_buffer[STATIC_SIZE];
 static int static_pointer=0;
-static bool loggedError=false;
 
 
 static inline void log_mem(const char * method, void *ptr, size_t size, struct backtrace_struct * bt)
 {
 	/* Prevent preparing the output in memory in case the output is already closed */
-	if(!g_ctx.memlog_disabled)
+	if(!memlog_disabled)
 	{
 		char buf[LOG_BUFSIZE];
 		int len = snprintf(buf, sizeof(buf), "+ %s %zu %p\n", method,
@@ -222,21 +209,21 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 static void *__init_lib(void)
 {
 	/* check already initialized */
-	if(!__sync_bool_compare_and_swap(&g_ctx.init_done,
+	if(!__sync_bool_compare_and_swap(&init_done,
 		LOG_MALLOC_INIT_NULL, LOG_MALLOC_INIT_STARTED))
 	{
 		return 0;
 	}
-        int w = write(g_ctx.memlog_fd, "Init\n", 5);
+        int w = write(LOG_MALLOC_TRACE_FD, "Init\n", 5);
         /* auto-disable trace if file is not open  */
         if(w == -1 && errno == EBADF)
         {
             write(STDERR_FILENO,"1022CLOSE\n",10);
-            g_ctx.memlog_disabled = true;
+            memlog_disabled = true;
         }else
         {
             write(STDERR_FILENO,"1022OPEN\n",9);
-            g_ctx.memlog_disabled = false;
+            memlog_disabled = false;
         }
 	/* get real functions pointers */
 	DL_RESOLVE(malloc);
@@ -248,12 +235,12 @@ static void *__init_lib(void)
 	DL_RESOLVE(valloc);
 	DL_RESOLVE(pvalloc);
 	DL_RESOLVE(aligned_alloc);
-	__sync_bool_compare_and_swap(&g_ctx.init_done,
+	__sync_bool_compare_and_swap(&init_done,
 		LOG_MALLOC_INIT_STARTED, LOG_MALLOC_INIT_DONE);
 	//TODO: call backtrace here to init itself
 
 	/* post-init status */
-	if(!g_ctx.memlog_disabled)
+	if(!memlog_disabled)
 	{
 		int s, w;
 		char path[256];
@@ -277,7 +264,7 @@ static void *__init_lib(void)
 			s = snprintf(buf, sizeof(buf), "# CWD %s\n", path);
 			write_log(buf, s);
 		}
-		copyfile("# MAPS\n", "/proc/self/maps", g_ctx.memlog_fd);
+		copyfile("# MAPS\n", "/proc/self/maps", LOG_MALLOC_TRACE_FD);
 /*		s = readlink("/proc/self/maps", path, sizeof(path));
 		if(s > 1)
 		{
@@ -303,11 +290,11 @@ static void __attribute__ ((constructor))log_malloc2_init(void)
 static void __fini_lib(void)
 {
 	/* check already finalized */
-	if(!__sync_bool_compare_and_swap(&g_ctx.init_done,
+	if(!__sync_bool_compare_and_swap(&init_done,
 		LOG_MALLOC_INIT_DONE, LOG_MALLOC_FINI_DONE))
 		return;
 
-	if(!g_ctx.memlog_disabled)
+	if(!memlog_disabled)
 	{
 		int s;
 		char buf[LOG_BUFSIZE];
@@ -335,7 +322,6 @@ static __thread int in_trace = 0;
  *  INTERNAL FUNCTIONS
  */
 #define CREATE_BACKTRACE(BACKTRACE_STRUCT) (BACKTRACE_STRUCT).nptrs=backtrace(((BACKTRACE_STRUCT).buffer), LOG_MALLOC_BACKTRACE_COUNT)
-//#define CREATE_BACKTRACE(BACKTRACE_STRUCT) (BACKTRACE_STRUCT).nptrs=10
 
 static inline void * calloc_static(size_t nmemb, size_t size)
 {
