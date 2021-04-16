@@ -16,27 +16,6 @@
  *
  */
 
-#include <assert.h>
-
-/* config (LINUX specific) */
-#ifndef LOG_MALLOC_TRACE_FD
-#define LOG_MALLOC_TRACE_FD		1022
-#endif
-
-#ifndef LOG_MALLOC_BACKTRACE_COUNT
-#define LOG_MALLOC_BACKTRACE_COUNT	7
-#endif
-
-#ifndef LOG_MALLOC_STATM_PATH
-#define LOG_MALLOC_STATM_PATH		"/proc/self/statm"
-#endif
-
-#ifndef LOG_MALLOC_MAPS_PATH
-#define LOG_MALLOC_MAPS_PATH		"/proc/self/maps"
-#endif
-
-/* API macros */
-
 /* disable macros */
 #ifndef LOG_MALLOC_NDEBUG
 

@@ -4,6 +4,8 @@
  * 
  * Author: András Schmidt
  * https://github.com/rizsi
+ *
+ * Based on previous implementations by other authors. See their comments below:
  */ 
 /*
  * Based on Author: Samuel Behan <_samuel_._behan_(at)_dob_._sk> (C) 2011-2014
@@ -63,6 +65,8 @@
 #include <malloc.h>
 
 #include <dlfcn.h>
+#include <assert.h>
+
 
 #include "log-malloc-simple.h"
 #include "log-malloc-simple-internal.h"
@@ -70,6 +74,8 @@
 /* config */
 #define LOG_BUFSIZE		4096
 #define MAX_PADDING		1024
+#define LOG_MALLOC_TRACE_FD		1022
+#define LOG_MALLOC_BACKTRACE_COUNT	7
 
 /* handler declarations */
 static void *(*real_malloc)(size_t size)	= NULL;
@@ -94,10 +100,6 @@ static log_malloc_ctx_t g_ctx = LOG_MALLOC_CTX_INIT;
 /*
  *  INTERNAL API FUNCTIONS
  */
-log_malloc_ctx_t *log_malloc_ctx_get(void)
-{
-	return &g_ctx;
-}
 
 int myStrlen(const char * str)
 {
@@ -137,12 +139,10 @@ static inline void copyfile(const char *head,
 }
 static inline void write_log(const char * buf, int size)
 {
-	int w = write(g_ctx.memlog_fd, buf, size);
-	/* auto-disable trace if file is not open  */
-	if(w == -1 && errno == EBADF)
+    	if(!g_ctx.memlog_disabled)
 	{
-		g_ctx.memlog_disabled = true;
-	}
+		write(g_ctx.memlog_fd, buf, size);
+        }
 }
 
 struct backtrace_struct {
@@ -158,11 +158,12 @@ struct backtrace_struct {
 #define STATIC_SIZE 1024
 static char static_buffer[STATIC_SIZE];
 static int static_pointer=0;
+static bool loggedError=false;
 
 
 static inline void log_mem(const char * method, void *ptr, size_t size, struct backtrace_struct * bt)
 {
-	/* prevent endless recursion, because inital backtrace call can involve some allocs */
+	/* Prevent preparing the output in memory in case the output is already closed */
 	if(!g_ctx.memlog_disabled)
 	{
 		char buf[LOG_BUFSIZE];
@@ -193,7 +194,7 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 			}
 			len+=snprintf(buf+len, sizeof(buf)-len, "-\n");
 			write_log(buf, len);
-	}
+        }
 	return;
 }
 
@@ -205,7 +206,17 @@ static void *__init_lib(void)
 	{
 		return 0;
 	}
-
+        int w = write(g_ctx.memlog_fd, "Init\n", 5);
+        /* auto-disable trace if file is not open  */
+        if(w == -1 && errno == EBADF)
+        {
+            write(STDERR_FILENO,"1022CLOSE\n",10);
+            g_ctx.memlog_disabled = true;
+        }else
+        {
+            write(STDERR_FILENO,"1022OPEN\n",9);
+            g_ctx.memlog_disabled = false;
+        }
 	/* get real functions pointers */
 	DL_RESOLVE(malloc);
 	DL_RESOLVE(calloc);

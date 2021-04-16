@@ -36,8 +36,6 @@ typedef struct log_malloc_ctx_s {
 		false,				\
 	}
 
-/* API function */
-log_malloc_ctx_t *log_malloc_ctx_get(void);
 void log_malloc_write(const char * str, int len);
 #endif
 
