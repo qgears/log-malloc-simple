@@ -55,6 +55,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <execinfo.h>
 #include <sys/time.h>
@@ -68,8 +69,28 @@
 #include <assert.h>
 
 
-#include "log-malloc-simple.h"
-#include "log-malloc-simple-internal.h"
+/* init constants */
+#define LOG_MALLOC_INIT_NULL		0xFAB321
+#define LOG_MALLOC_INIT_STARTED		0xABCABC
+#define LOG_MALLOC_INIT_DONE		0x123FAB
+#define LOG_MALLOC_FINI_DONE		0xFAFBFC
+
+/* global context */
+typedef struct log_malloc_ctx_s {
+	sig_atomic_t init_done;
+	int memlog_fd;
+	bool memlog_disabled;
+} log_malloc_ctx_t;
+
+#define LOG_MALLOC_CTX_INIT			\
+	{					\
+		LOG_MALLOC_INIT_NULL,		\
+		LOG_MALLOC_TRACE_FD,		\
+		false,				\
+	}
+
+void log_malloc_write(const char * str, int len);
+
 
 /* config */
 #define LOG_BUFSIZE		4096
