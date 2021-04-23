@@ -175,8 +175,8 @@ static inline void log_mem(const char * method, void *ptr, size_t size, struct b
 	if(!memlog_disabled)
 	{
 		char buf[LOG_BUFSIZE];
-		int len = snprintf(buf, sizeof(buf), "+ %s %zu %p\n", method,
-			size, ptr);
+		int len = snprintf(buf, sizeof(buf), "+ %s %zu %p %d %d\n", method,
+			size, ptr, getpid(), gettid());
 			if(bt!=NULL && bt->nptrs>0)
 			{
 				char ** names=backtrace_symbols(&(bt->buffer[1]), bt->nptrs-1);

@@ -22,4 +22,8 @@ int main ()
 	{
 		recurseDepth(i);
 	}
+	p=malloc(112);
+	p=realloc(p, 2000);
+	free(p);
 }
+
