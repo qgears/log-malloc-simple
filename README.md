@@ -21,12 +21,9 @@ log-malloc-simple is a much simplified version of log-malloc2. The simplificatio
 - thread safe
 - fork is detected (PID is part of each log message) and allocations in the forked process are ignored (they caused noise in the logs)
 
-## How to use
+## Caveats
 
 - Use `G_SLICE=always-malloc` environment variable value so that g_slice allocations are better trackable (in case of a leak there will be no false blame of a different component).
-
-## Open issues
-
 - In some cases pthread_create call has a phantom free that frees memory block that was never allocated. I guess it can somehow call original malloc without going through the anchor functions.
 
 ## Dependencies
@@ -37,6 +34,10 @@ log-malloc-simple is a much simplified version of log-malloc2. The simplificatio
 ## Usage
 
 `LD_PRELOAD=./log-malloc-simple.so command args ... 1022>/tmp/program.log`
+
+or it is possible to send the logs to a pipe that is processed on the same computer:
+
+`LD_PRELOAD=./log-malloc-simple.so command args ... 1022>/tmp/malloc.pipe`
 
 or it is possible to send the logs to TCP directly:
 
@@ -52,7 +53,10 @@ Standalone program written in Java. Usage:
 - Start analyzer: `$ java -jar analyzer.jar /tmp/malloc.pipe`
 - Use console to command analyzer: stop/start collecting data, print or save current state to file
 - Start program to analyze: `$ LD_PRELOAD=./log-malloc-simple.so my_executable args ... 1022>/tmp/malloc.pipe`
+- Optional: Create a snapshot of all active memory allocations by command `snapshot 00.snapshot`
 - Run test cases that should run without leaking memory.
+- Optional: Create a snapshot of all active memory allocations by command `snapshot 01.snapshot`
+- Optional: Execute the compare snapshots mode of the analyser to see comparison of the allocated blocks. (See below)
 - See the output of the analyzer for non-freed memory chunks.
 - Log output may also be directed to a static file and analysed offline.
 - Input of analyser may be redirected. This way it can be used in an automated process.
