@@ -23,7 +23,7 @@ log-malloc-simple is a much simplified version of log-malloc2. The simplificatio
 
 ## Caveats
 
-- Use `G_SLICE=always-malloc` environment variable value so that g_slice allocations are better trackable (in case of a leak there will be no false blame of a different component).
+- When using glib, use `G_SLICE=always-malloc` environment variable value so that g_slice allocations are better trackable (in case of a leak there will be no false blame of a different component).
 - In some cases pthread_create call has a phantom free that frees memory block that was never allocated. I guess it can somehow call original malloc without going through the anchor functions.
 
 ## Dependencies
