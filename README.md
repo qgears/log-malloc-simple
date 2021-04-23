@@ -19,6 +19,15 @@ log-malloc-simple is a much simplified version of log-malloc2. The simplificatio
 - logging to file descriptor 1022 (if opened)
 - call stack **backtrace** (using GNU backtrace())
 - thread safe
+- fork is detected (PID is part of each log message) and allocations in the forked process are ignored (they caused noise in the logs)
+
+## How to use
+
+- Use `G_SLICE=always-malloc` environment variable value so that g_slice allocations are better trackable (in case of a leak there will be no false blame of a different component).
+
+## Open issues
+
+- In some cases pthread_create call has a phantom free that frees memory block that was never allocated. I guess it can somehow call original malloc without going through the anchor functions.
 
 ## Dependencies
 
@@ -119,6 +128,7 @@ Analyser waits for commands on stdin:
  * (reset - clear all log entries cached by the analyzer)
  * print - print current allocation status (since last reset/on) to stdout
  * save <filename> - print current allocation status (since last reset/on) to file
+ * snapshot <filename> - save all current stored allocations into a file (see compare below)
 
 The analysed data output is in text format. After a short summary all not-freed allocations are listed. These entries are ordered and summarised by the identifier of the instruction (library+pointer) calling the allocation method. The textual output of the same program in different moments may be compared to each other using text comparing tools to find leaks. (A single call from each allocator calling instruction is printed as an example in the output but this does not mean that it is the only possible stack trace that calls this leaking method.):
 
@@ -145,10 +155,31 @@ allocator: /usr/lib/x86_64-linux-gnu/libpixman-1.so.0(+0x58c6b)[0x7ff6ccd50c6b]
 
 ```
 
+## Compare snapshots
+
+Command line: ```--compare <fileState2> --pipe <fileState1>``` --printAllIfContains pattern
+
+What it does:
+
+ * process both fileState1 and fileState1 normally into a separate model in memory
+ * diff the the models in memory:
+ * Number of objects, allocated bytes of objects by allocator identifier (the program line that calls to allocator) is counted for each allocator
+ ** First same allocations are removed
+ ** Freed and new allocations are diffed by size and number
+ ** new allocations are part of the report
+ * Output is ordered by the size of the increment (possible leak) by allocator identifier
+ * --printAllIfContains (multiple instances are possible) if a pattern is present in the stack trace of the first example then all examples are written into the output. Useful in case we find a leak that starts like the one below and we want to see each distinct stack traces which end in this leaking function call. Then we add the ```--printAllIfContains g_malloc+0x29``` parameter:
+
+``` 
+/lib/i386-linux-gnu/libglib-2.0.so.0(g_malloc+0x29) [0x93737a39]
+/lib/i386-linux-gnu/libglib-2.0.so.0(g_slice_alloc+0x49) [0x937501a9]
+```
+
 # Author
 
 - ***András Schmidt***
  - **contact**: https://github.com/rizsi (author's Github page)
+* Based on previous works by Samuel Behan and Ivan Tikhonov - see comments in log-malloc-simple.c
 
 # Licensing
 

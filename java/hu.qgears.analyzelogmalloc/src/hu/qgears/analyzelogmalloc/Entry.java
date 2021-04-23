@@ -1,5 +1,6 @@
 package hu.qgears.analyzelogmalloc;
 
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,7 +22,7 @@ public class Entry {
 	/**
 	 * The address of allocated memory as a hexa string (eg. 0xabce1234)
 	 */
-	private String address;
+	private long address;
 	/**
 	 * Title of this entry - the method called (eg. "malloc", "free" etc)
 	 */
@@ -43,6 +44,14 @@ public class Entry {
 	 */
 	private long size;
 	/**
+	 * PID of the process.
+	 */
+	private long pid;
+	/**
+	 * Thread id TODO implement
+	 */
+	private long tid;
+	/**
 	 * Allocator key is the method entry on the stack trace that has called the allocator.
 	 */
 	private String allocatorKey;
@@ -59,56 +68,74 @@ public class Entry {
 		try {
 			List<String> pieces=UtilString.split(startLine, " ");
 			title=pieces.get(1);
-			if("calloc".equals(title))
-			{
+			switch (title) {
+			case "calloc":
 				allocation=true;
 				known=true;
-				address=pieces.get(3);
-				size=Long.parseLong(pieces.get(2));
-			}else if("free".equals(title))
-			{
+				parseFields(pieces);
+				break;
+			case "free":
 				known=true;
-				address=pieces.get(3);
-				size=Long.parseLong(pieces.get(2));
+				parseFields(pieces);
 				free=true;
-			}else if("malloc".equals(title))
-			{
+				break;
+			case "malloc":
 				allocation=true;
 				known=true;
-				address=pieces.get(3);
-				size=Long.parseLong(pieces.get(2));
-			}else if("realloc_alloc".equals(title))
-			{
+				parseFields(pieces);
+				break;
+			case "realloc_alloc":
 				known=true;
-				address=pieces.get(3);
-				size=Long.parseLong(pieces.get(2));
+				parseFields(pieces);
 				allocation=true;
-			}else if("realloc_free".equals(title))
-			{
+				break;
+			case "realloc_free":
 				known=true;
-				address=pieces.get(3);
-				size=Long.parseLong(pieces.get(2));
+				parseFields(pieces);
 				free=true;
-			}else if("posix_memalign".equals(title))
-			{
+				break;
+			case "posix_memalign":
 				known=true;
-				address=pieces.get(3);
-				size=Long.parseLong(pieces.get(2));
+				parseFields(pieces);
 				allocation=true;
-			}else if("INIT".equals(title))
-			{
+				break;
+			case "INIT":
 				// Nothing to do but no error log
 				known=true;
-			}
-			else if("FINI".equals(title))
-			{
+				break;
+			case "FINI":
 				// Nothing to do but no error log
 				known=true;
+				break;
+			default:
+				break;
 			}
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+	}
+	private void parseFields(List<String> pieces) {
+		try {
+			String a=pieces.get(3);
+			if(a.startsWith("0x"))
+			{
+				address=Long.parseLong(a.substring(2), 16);
+			}else
+			{
+				System.err.println("Address does not start with 0x: "+a);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		String pidField=null;
+		try {
+			pidField=pieces.get(4);
+			pid=Long.parseLong(pidField);
+		} catch (Exception e) {
+			System.err.println("Pid parse error:"+pidField+" "+e);
+		}
+		size=Long.parseLong(pieces.get(2));
 	}
 	@Override
 	public String toString() {
@@ -132,7 +159,7 @@ public class Entry {
 	public boolean isAllocation() {
 		return allocation;
 	}
-	public String getAddress() {
+	public long getAddress() {
 		return address;
 	}
 	public long getSize() {
@@ -154,5 +181,71 @@ public class Entry {
 	}
 	public String getAllocatorKey() {
 		return allocatorKey;
+	}
+	public String getStartLine() {
+		return startLine;
+	}
+	public List<String> getLines() {
+		return lines;
+	}
+	public String printToWhole()
+	{
+		StringBuilder ret=new StringBuilder();
+		printToWhole(ret);
+		return ret.toString();
+	}
+	public void printToWhole(PrintStream out) {
+		out.println(getStartLine());
+		for(String l: getLines())
+		{
+			out.println(l);
+		}
+		out.println("-");
+	}
+	public void printToWhole(StringBuilder out) {
+		out.append(getStartLine());
+		out.append("\n");
+		for(String l: getLines())
+		{
+			out.append(l);
+			out.append("\n");
+		}
+		out.append("-");
+		out.append("\n");
+	}
+	public long getPid() {
+		return pid;
+	}
+	public boolean containsPattern(String p) {
+		if(allocatorKey.contains(p))
+		{
+			return true;
+		}
+		for(String l: lines)
+		{
+			if(l.contains(p))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	public String printToWholePointerBlurred() {
+		StringBuilder out=new StringBuilder();
+		out.append("+ ");
+		out.append(title);
+		out.append(" ");
+		out.append(size);
+		out.append(" PTR ");
+		out.append(pid);
+		out.append("\n");
+		for(String l: getLines())
+		{
+			out.append(l);
+			out.append("\n");
+		}
+		out.append("-");
+		out.append("\n");
+		return out.toString();
 	}
 }
