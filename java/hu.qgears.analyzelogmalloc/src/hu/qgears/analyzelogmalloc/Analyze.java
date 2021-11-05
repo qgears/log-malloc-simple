@@ -1,6 +1,7 @@
 package hu.qgears.analyzelogmalloc;
 
 import java.io.BufferedReader;
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -15,22 +16,24 @@ import java.io.Reader;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import hu.qgears.commons.UtilEvent;
 import hu.qgears.commons.UtilString;
+import hu.qgears.commons.signal.SignalFutureWrapper;
 import joptsimple.annot.AnnotatedClass;
 import joptsimple.annot.JOHelp;
+import joptsimple.annot.JOSkip;
 
 /**
  * log-malloc-simple analyser tool. Command line tool that reads input from an process instrumented
  * with log-malloc-simple and processes it to show usable information.
  * 
- * @author rizsi
- *
  */
-public class Analyze {
+public class Analyze implements Closeable {
 	public static class Args
 	{
 		@JOHelp("TCP host of server port")
@@ -53,7 +56,40 @@ public class Analyze {
 		}
 		@JOHelp("In compare mode write all instances (instead of a single example) of allocations that contain this string (in any of the stack trace)")
 		public List<String> printAllIfContains=new ArrayList<String>();
+		@JOHelp("In compare mode hide all instances of allocations that's identifier line contain this string")
+		public List<String> hideIfContains=new ArrayList<String>();
+		/**
+		 * The analyzer signals that the TCP server was opened.
+		 * Non user parameter but used when analyzer is executed in programmed mode
+		 * when used in regression tests.
+		 */
+		@JOSkip
+		public SignalFutureWrapper<SocketAddress> eventTcpServerOpened=new SignalFutureWrapper<>();
+		/**
+		 * Interactive mode 
+		 * Non user parameter but used when analyzer is executed in programmed mode
+		 * when used in regression tests.
+		 */
+		@JOSkip
+		public boolean modeInteractive = true;
+		/**
+		 * In case of programmed embedded compare mode (not interactive mode)
+		 * send all difference entries to the host.
+		 */
+		@JOSkip
+		public UtilEvent<DifferentEntries> compareDiffEntryEvent=new UtilEvent<DifferentEntries>();
+		public boolean isDiffEntryHidden(DifferentEntries de) {
+			for(String s: hideIfContains)
+			{
+				if(de.key.contains(s))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
 	}
+	private final SignalFutureWrapper<Boolean> closed=new SignalFutureWrapper<>();
 	/**
 	 * Analysation is running.
 	 * When false then input is ignored.
@@ -83,7 +119,10 @@ public class Analyze {
 			printUsage(ac);
 		}else
 		{
-			new Analyze().start(a);
+			try(Analyze an=new Analyze())
+			{
+				an.start(a);
+			}
 		}
 	}
 
@@ -101,11 +140,22 @@ public class Analyze {
 	 * Returns when communicateUser returns.
 	 * @param args
 	 */
-	private void start(final Args args) {
+	public void start(final Args args) {
 		if(args.compare!=null)
 		{
 			System.out.println("Compare mode: "+args.pipe.getAbsolutePath()+" "+args.compare.getAbsolutePath());
-			executeCompare(args);
+			try
+			{
+				try(FileInputStream fis=new FileInputStream(args.pipe))
+				{
+					try(FileInputStream fis2=new FileInputStream(args.compare))
+					{
+						executeCompare(fis, fis2, System.out, args);
+					}
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 			return;
 		} else if(args.pipe!=null)
 		{
@@ -118,7 +168,7 @@ public class Analyze {
 					try {
 						try(FileInputStream fis=new FileInputStream(args.pipe))
 						{
-							processInput(fis, args.openTee());
+							processInput(args, fis, args.openTee());
 						}
 					} catch (Exception e) {
 						e.printStackTrace();
@@ -129,24 +179,26 @@ public class Analyze {
 		{
 			startTCPServer(args);
 		}
-		communicateUser();
-	}
-	private void executeCompare(Args args) {
-		try {
-			try(FileInputStream fis=new FileInputStream(args.pipe))
-			{
-				processInput(fis, null);
-			}
-			EntryProcessor prev=entryProcessor;
-			entryProcessor=new EntryProcessor();
-			try(FileInputStream fis=new FileInputStream(args.compare))
-			{
-				processInput(fis, null);
-			}
-			entryProcessor.processCompare(System.out, prev, args);
-		} catch (Exception e) {
-			e.printStackTrace();
+		if(args.modeInteractive)
+		{
+			communicateUser();
 		}
+	}
+	/**
+	 * Execute compare
+	 * @param is1 first snapshot to compare. On non-exception path it is closed by this method
+	 * @param is2 second snapshot to compare. On non-exception path it is closed by this method
+	 * @param out output to write compare result to
+	 * @throws IOException 
+	 */
+	public void executeCompare(InputStream is1, InputStream is2, PrintStream out, Args args) throws IOException {
+		processInput(args, is1, null);
+		is1.close();
+		EntryProcessor prev=entryProcessor;
+		entryProcessor=new EntryProcessor();
+		processInput(args, is2, null);
+		is2.close();
+		entryProcessor.processCompare(out, prev, args);
 	}
 
 	private void startTCPServer(final Args args) {
@@ -156,8 +208,20 @@ public class Analyze {
 					try(ServerSocket ss=new ServerSocket())
 					{
 						ss.bind(new InetSocketAddress(args.host, args.port));
+						SocketAddress sa=ss.getLocalSocketAddress();
 						System.out.println("TCP server port opened: "+args.host+":"+ss.getLocalPort());
+						args.eventTcpServerOpened.ready(sa, null);
+						closed.addOnReadyHandler(e->{try {
+							ss.close();
+						} catch (IOException e1) {
+							e1.printStackTrace();
+						}});
 						Socket s=ss.accept();
+						closed.addOnReadyHandler(e->{try {
+							s.close();
+						} catch (IOException e1) {
+							e1.printStackTrace();
+						}});
 						System.out.println("TCP client connected...");
 						new Thread("TCP read thread")
 						{
@@ -166,7 +230,7 @@ public class Analyze {
 								try {
 									try
 									{
-										processInput(s.getInputStream(), args.openTee());
+										processInput(args, s.getInputStream(), args.openTee());
 									}finally
 									{
 										s.close();
@@ -189,7 +253,7 @@ public class Analyze {
 	 * @param outputStream 
 	 * @param f
 	 */
-	private void processInput(InputStream in, OutputStream outputStream) {
+	private void processInput(Args args, InputStream in, OutputStream outputStream) {
 		try {
 			Reader r = new InputStreamReader(in, StandardCharsets.UTF_8);
 			BufferedReader br = new BufferedReader(r);
@@ -232,7 +296,10 @@ public class Analyze {
 					outputStream.close();
 				}
 			}
-			System.err.println("Input closed.");
+			if(args.modeInteractive)
+			{
+				System.err.println("Input closed.");
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -298,16 +365,18 @@ public class Analyze {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
 	}
-	synchronized private void snapshot(String filePath) throws IOException {
+	synchronized public void snapshot(OutputStream fos) throws IOException {
+		PrintStream ps=new PrintStream(fos, false, "UTF-8");
+		entryProcessor.snapshot(ps);
+		ps.flush();
+	}
+	public void snapshot(String filePath) throws IOException {
 		File f=new File(filePath);
 		FileOutputStream fos=new FileOutputStream(f);
 		try
 		{
-			PrintStream ps=new PrintStream(fos, false, "UTF-8");
-			entryProcessor.snapshot(ps);
-			ps.close();
+			snapshot(fos);
 		}finally
 		{
 			fos.close();
@@ -369,5 +438,9 @@ public class Analyze {
 		out.println(" * print - print current allocation status (since last reset/on) to stdout");
 		out.println(" * save <filename> - print current allocation status (since last reset/on) to file");
 		out.println(" * snapshot <filename> - save all current stored allocations into a file");
+	}
+	@Override
+	public void close() {
+		closed.ready(true, null);
 	}
 }

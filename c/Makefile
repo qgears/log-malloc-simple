@@ -7,7 +7,7 @@ all: log-malloc-simple.so
 
 
 log-malloc-simple.so: log-malloc-simple.c
-	gcc -Wno-unused-result -o log-malloc-simple.so -shared -fPIC -DPIC log-malloc-simple.c -lpthread -ldl -nostartfiles -O2
+	gcc -Wno-unused-result -o log-malloc-simple.so -shared -fPIC -DPIC log-malloc-simple.c -ldl -nostartfiles -O2
 
 hellow: hellow.c
 	gcc -o hellow -rdynamic hellow.c

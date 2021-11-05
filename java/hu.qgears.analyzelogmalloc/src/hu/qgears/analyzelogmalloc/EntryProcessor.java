@@ -207,30 +207,34 @@ public class EntryProcessor {
 		outer:
 		for(DifferentEntries de: diffs)
 		{
-			out.println(""+de.diffSize+" "+de.diffNum+" "+de.key);
-			for(String p: args.printAllIfContains)
+			if(!args.isDiffEntryHidden(de))
 			{
-				if(de.allocated.size()>1)
+				args.compareDiffEntryEvent.eventHappened(de);
+				out.println(""+de.diffSize+" "+de.diffNum+" "+de.key);
+				for(String p: args.printAllIfContains)
 				{
-					if(de.allocated.get(0).containsPattern(p))
+					if(de.allocated.size()>1)
 					{
-						HashMap<String, Integer> stacks=new HashMap<>();
-						for(Entry e: de.allocated)
+						if(de.allocated.get(0).containsPattern(p))
 						{
-							String stack=e.printToWholePointerBlurred();
-							incStack(stacks, stack);
+							HashMap<String, Integer> stacks=new HashMap<>();
+							for(Entry e: de.allocated)
+							{
+								String stack=e.printToWholePointerBlurred();
+								incStack(stacks, stack);
+							}
+							TreeMap<String, Integer> ordered=new TreeMap<String, Integer>(stacks);
+							for(String key: ordered.keySet())
+							{
+								out.print("Number of instances: "+stacks.get(key)+"\n");
+								out.print(key);
+							}
+							continue outer;
 						}
-						TreeMap<String, Integer> ordered=new TreeMap<String, Integer>(stacks);
-						for(String key: ordered.keySet())
-						{
-							out.print("Number of instances: "+stacks.get(key)+"\n");
-							out.print(key);
-						}
-						continue outer;
 					}
 				}
+				de.printFirst(out);
 			}
-			de.printFirst(out);
 		}
 	}
 	private void incStack(HashMap<String, Integer> stacks, String stack) {
